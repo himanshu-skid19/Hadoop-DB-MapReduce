@@ -10,17 +10,20 @@ def parse_sql(sql_statement):
     """
 
     # Regular expression to match the columns
-    match = re.search(r"SELECT\s+((?:\w+(?:\s*,\s*\w+)*))(?:\s+FROM\s+(\w+))?", sql_statement, re.IGNORECASE)
+    match = re.search(r"SELECT\s+((?:\*|\w+(?:\s*,\s*\w+)*))(?:\s+FROM\s+(\w+))?", sql_statement, re.IGNORECASE)
 
     if match:
-        columns = [col.strip() for col in match.group(1).split(',')]
+        if match.group(1).strip() == '*':
+            columns = ['*']
+        else:
+            columns = [col.strip() for col in match.group(1).split(',')]
         table = match.group(2)
         return columns, table
     else:
         raise ValueError("Invalid SQL statement format")
     
 
-sql_statement = "SELECT VendorID, passenger_count FROM tripdata"
+sql_statement = "SELECT * FROM tripdata"
 columns, table = parse_sql(sql_statement)
 
 
@@ -35,7 +38,10 @@ def mapper():
 
         if headers is None:
             headers = line.split(',')
-            column_indices = [headers.index(col) for col in columns if col in headers]
+            if columns == ['*']:
+                column_indices = [i for i in range(len(headers))]
+            else:
+                column_indices = [headers.index(col) for col in columns if col in headers]
             continue
 
         values = line.split(',')

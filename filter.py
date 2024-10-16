@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 import re
 import sys
+import csv
+
 
 def parse_sql(sql_statement):
     """
     Parses a SQL statement to extract multiple filtering conditions including operators.
-    Assumes the SQL statement is of the form: SELECT * FROM table WHERE column1 = 'value1' AND column2 > 'value2';
+    Assumes the SQL statement is of the form: SELECT * FROM table WHERE column1 = value1 AND column2 > value2;
     """
     where_clause = {}
     projections = []
     
-    # Capture all conditions in the WHERE clause, including operators
-    pattern = r"(\w+)\s*([=<>!]+)\s*'([^']+)'"
+    # Capture all conditions in the WHERE clause, including operators and values
+    # Pattern modified to accept numeric values (e.g., 10) and alphanumeric values (e.g., value1)
+    pattern = r"(\w+)\s*([=<>!]+)\s*([^\s,]+)"
+    
     # Extract everything after WHERE and before optional GROUP BY or ORDER BY
     conditions = re.search(r"WHERE\s+(.*?)(?:GROUP BY|ORDER BY|$)", sql_statement, re.IGNORECASE)
-    
     
     if conditions:
         # Find all key-operator-value triplets in the conditions
@@ -38,45 +41,29 @@ def parse_sql(sql_statement):
     
     return where_clause, projections, table
 
-# Example usage:
-sql_statement = "SELECT VendorID, passenger_count, trip_distance, tpep_pickup_datetime FROM tripdata WHERE VendorID = '2' AND passenger_count >= '4' AND trip_distance <= '10'"
 
-filters, projections, table = parse_sql(sql_statement)
-# print(filters)  
-# print(projections)
-# print(table)
 
-def mapper():
-    headers = None
-    filter_indices = {}
-    headers_processed = False  # Flag to check if headers have been processed
-    column_indices = None
+
+def mapper(filters, projections, table):
+    headers = []
+    with open('/mnt/c/Users/himan/Desktop/Dump/Hadoop/headers.csv', 'r') as f:
+        reader = csv.reader(f)
+        headers = next(reader)  # Read the first row as headers
+
+        # Detect and process headers or data
+    filter_indices = {col: headers.index(col) for col in filters if col in headers}
+
+    if projections[0] != '*':
+        column_indices = [headers.index(col) for col in projections if col in headers]
+    else:
+        column_indices = None
 
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
-
-        # Detect and process headers or data
-        if not headers_processed:
-            # Assume the first line could be either headers or data
-            fields = line.split(',')
-            
-            # Check if all filter columns are present in the fields
-            if all(column in fields for column in filters):
-                headers = fields
-                filter_indices = {column: headers.index(column) for column in filters}
-                if projections[0] != '*':
-                    column_indices = [headers.index(col) for col in projections if col in headers]
-                headers_processed = True
-                continue
-            else:
-                # If not all filter columns are present, treat as data
-                headers = [f"col_{i}" for i in range(len(fields))]
-                filter_indices = {column: i for i, column in enumerate(filters)}
-                headers_processed = True
         
-
+        # print(f"DEBUG: filter_indices: {filter_indices}", file=sys.stderr)
         # Process data lines after headers are processed
         data = line.split(',')
         num_conditions = len(filters)
@@ -125,12 +112,21 @@ def reducer():
         print(line.strip())
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 'mapper':
-            mapper()
-        elif sys.argv[1] == 'reducer':
-            reducer()
-        else:
-            print("Invalid argument. Use 'mapper' or 'reducer'.")
+    if len(sys.argv) < 3:
+        print("Usage: python projection.py <SQL statement> <mapper|reducer>")
+        sys.exit(1)
+
+    # Get the SQL statement from the command line argument
+    sql_statement = sys.argv[1]
+
+    print(f"SQL Statement Received: {sql_statement}", file=sys.stderr)  # Debugging line
+
+    filters, projections, table = parse_sql(sql_statement)
+
+    # Determine whether to run mapper or reducer
+    if sys.argv[2] == 'mapper':
+        mapper(filters, projections, table)
+    elif sys.argv[2] == 'reducer':
+        reducer()
     else:
-        print("No arguments provided.")
+        print("Invalid argument. Use 'mapper' or 'reducer'.")

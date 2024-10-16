@@ -5,11 +5,10 @@ import sys
 
 def parse_sql(sql_statement):
     """
-    Parses a simple SQL statement to extract the column name and value.
+    Parses a simple SQL statement to extract the column names and the table.
     Assumes the SQL statement is of the form: SELECT column1, column2, ... FROM table; 
     """
-
-    # Regular expression to match the columns
+    # Regular expression to match the columns and table name
     match = re.search(r"SELECT\s+((?:\*|\w+(?:\s*,\s*\w+)*))(?:\s+FROM\s+(\w+))?", sql_statement, re.IGNORECASE)
 
     if match:
@@ -21,13 +20,9 @@ def parse_sql(sql_statement):
         return columns, table
     else:
         raise ValueError("Invalid SQL statement format")
-    
-
-sql_statement = "SELECT * FROM tripdata"
-columns, table = parse_sql(sql_statement)
 
 
-def mapper():
+def mapper(columns):
     headers = None
     column_indices = None
 
@@ -63,17 +58,24 @@ def reducer():
         key, _ = parts
 
         print(key)
-        
 
 
-    
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 'mapper':
-            mapper()
-        elif sys.argv[1] == 'reducer':
-            reducer()
-        else:
-            print("Invalid argument. Use 'mapper' or 'reducer'.")
+    if len(sys.argv) < 3:
+        print("Usage: python projection.py <SQL statement> <mapper|reducer>")
+        sys.exit(1)
+
+    # Get the SQL statement from the command line argument
+    sql_statement = sys.argv[1]
+
+    print(f"SQL Statement Received: {sql_statement}", file=sys.stderr)  # Debugging line
+
+    columns, table = parse_sql(sql_statement)
+
+    # Determine whether to run mapper or reducer
+    if sys.argv[2] == 'mapper':
+        mapper(columns)
+    elif sys.argv[2] == 'reducer':
+        reducer()
     else:
-        print("No arguments provided.")
+        print("Invalid argument. Use 'mapper' or 'reducer'.")
